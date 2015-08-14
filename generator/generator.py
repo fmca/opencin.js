@@ -1,40 +1,62 @@
 from __future__ import print_function
 import json
+import jsbeautifier
 
-def js_menu_funcs(menu_name, query, next_menu):
-    if query:
-        arg_template = "%%%"
-        query_parametrized = '\"+arg+\"'.join(query.split(arg_template))
-        arg_param = 'arg,' if arg_template in query else ''
-        return 'function get_%s(%scallback){ query("%s", "json" , callback, alert); }\n' % (menu_name, arg_param, query_parametrized)
-    else:
-        return ''
 
-def print_menu_tree(menu_name, menu_structure, tab=1):
+class Generator(object):
 
-    #print('-' * tab + menu_name)
-    next_menu = menu_structure['query']['results']['menuMatch']
-    sparql = menu_structure['query']['sparql']
+    def __init__(self, cinexplorer_model):
+        self.model = cinexplorer_model
 
-    menu_funcs = js_menu_funcs(menu_name, sparql, None)
-    if 'categories' in menu_structure:
-        categories = menu_structure['categories']
-        for c_name, c_struct in categories.items():
-            menu_funcs += print_menu_tree(c_name, c_struct, tab + 1)
+    def generate(self, func_gen_menu, current_menu=None):
+        if not current_menu:
+            current_menu = self.model.items()[0]  # first menu in hierarchy
+        menu_name, menu_value = current_menu
+        next_menu = menu_value['query']['results']['menuMatch']
+        sparql = menu_value['query']['sparql']
+        menu_funcs = func_gen_menu(menu_name, sparql, None)
+        if 'categories' in menu_value:
+            categories = menu_value['categories']
+            for c in categories.items():
+                menu_funcs += Generator.generate(self, func_gen_menu, c)
+        return menu_funcs
 
-    return menu_funcs
+
+class JSGenerator(Generator):
+
+    def __init__(self, template, cinexplorer_model):
+        self.template = template
+        return super(JSGenerator, self).__init__(cinexplorer_model)
+
+    def generate(self, beautify=True):
+        code = self.template + \
+            super(JSGenerator, self).generate(self.get_menu_func)
+        if beautify:
+            code = jsbeautifier.beautify(code)
+        return code
+
+    def get_menu_func(self, current_menu, query, next_menu):
+        js_menu_funcs = ''
+        if query:
+            arg_template = "%%%"
+            query_parametrized = '\"+arg+\"'.join(query.split(arg_template))
+            arg_param = 'arg,' if arg_template in query else ''
+            fun_template = 'function get_%s(%scallback){ query("%s", "json" , callback, alert); }\n'
+            js_menu_funcs = fun_template % (
+                current_menu, arg_param, query_parametrized)
+
+        return js_menu_funcs
+
 
 def main():
-    with open('structure.json') as json_file:
-        structure = json.load(json_file)
-        all_menu_funcs = print_menu_tree('home', structure['home'])
-
-        with open('template.js') as template:
-            header = template.read()
-            import jsbeautifier
-            script = jsbeautifier.beautify(header + all_menu_funcs)
+    with open('template.js') as template_file:
+        with open('structure.json') as struct_file:
             with open('../opencin.js', 'w') as result_file:
-                result_file.write(script)
+                template = template_file.read()
+                cinexplorer_model = json.load(struct_file)
+                js_generator = JSGenerator(template, cinexplorer_model)
+                js_code = js_generator.generate(beautify=True)
+                result_file.write(js_code)
 
 
 if __name__ == '__main__':

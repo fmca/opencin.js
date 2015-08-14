@@ -1,4 +1,6 @@
-//This script is auto-generated. Please don't change anything manually.
+/*************************************************************************
+**This script is auto-generated. Please don't change anything manually.***
+**************************************************************************/
 
 var endpoint_uri = "http://webproj04.cin.ufpe.br/sparql/";
 
